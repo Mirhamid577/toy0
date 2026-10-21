@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+.vite
+*.local
+.env
+.env.*
+.DS_Store
+npm-debug.log*
+yarn-error.log*
+.vercel
+shot-gate.png
+shot-page.png
