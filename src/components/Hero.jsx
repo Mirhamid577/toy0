@@ -2,11 +2,18 @@ import { useEffect, useRef } from "react";
 import config from "../config.js";
 
 const lerp = (a, b, t) => a + (b - a) * t;
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 /*
  * Hero: bezak, "To'yimizga xush kelibsiz", ismlar, bulutlar va qal'a.
  * chorlove.uz cloud-castle shabloni kabi: scroll qilinganda qal'a 0.8 -> 1.5
  * kattalashib pastga tushadi, bulutlar yon tomonga uchib ketadi.
+ *
+ * Telefonda:
+ *  - o'lchovlar (hero balandligi/joylashuvi) bir marta hisoblanadi, scroll'da
+ *    `getBoundingClientRect()` chaqirilmaydi -> titrash (jank) bo'lmaydi;
+ *  - qal'a wrapper orqali doim ekran markazida turadi (avval chapga surilgan edi);
+ *  - kattalashish diapazoni kichikroq, shuning uchun GPUda yumshoq chiziladi.
  */
 export default function Hero() {
   const heroRef = useRef(null);
@@ -17,45 +24,99 @@ export default function Hero() {
 
   useEffect(() => {
     let raf = 0;
+    let heroTop = 0;
+    let heroHeight = 1;
+    let compact = false;
+    let reduced = false;
+
+    const mq = window.matchMedia("(max-width: 767px)");
+    const rmq = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const measure = () => {
+      const hero = heroRef.current;
+      if (!hero) return;
+      const rect = hero.getBoundingClientRect();
+      heroTop = rect.top + window.scrollY;
+      heroHeight = Math.max(rect.height, 1);
+      compact = mq.matches;
+      reduced = rmq.matches;
+    };
 
     const update = () => {
       raf = 0;
       const hero = heroRef.current;
       if (!hero) return;
 
-      const rect = hero.getBoundingClientRect();
-      // 0 — hero ekranning tepasida, 1 — hero to'liq o'tib ketganda
-      const s = Math.min(1, Math.max(0, -rect.top / Math.max(rect.height, 1)));
+      // Kamaytirilgan harakat yoq bo'lsa — parallax o'chiriladi
+      if (reduced) {
+        if (castleRef.current) {
+          castleRef.current.style.transform = "translate3d(0, 0, 0) scale(1)";
+        }
+        return;
+      }
 
-      // Qal'a: 0.8 -> 1.5 o'lcham, 90px pastga
+      // 0 — hero ekranning tepasida, 1 — hero to'liq o'tib ketganda
+      const s = clamp01((window.scrollY - heroTop) / heroHeight);
+
+      // Qal'a: telefonda kichikroq diapazon (jank kamayadi), desktop'da kattaroq
+      const scaleFrom = compact ? 0.92 : 0.8;
+      const scaleTo = compact ? 1.22 : 1.5;
+      const drop = compact ? 42 : 90;
+
       if (castleRef.current) {
-        castleRef.current.style.transform = `translate3d(0, ${lerp(0, 90, s)}px, 0) scale(${lerp(0.8, 1.5, s)})`;
+        const scale = lerp(scaleFrom, scaleTo, s).toFixed(4);
+        const y = lerp(0, drop, s).toFixed(2);
+        castleRef.current.style.transform = `translate3d(0, ${y}px, 0) scale(${scale})`;
       }
       // Bulutlar yon tomonga ochiladi va xira bo'lib boradi
       if (cloudLeftRef.current) {
-        cloudLeftRef.current.style.transform = `translate3d(${lerp(-90, 240, s)}px, 0, 0)`;
+        cloudLeftRef.current.style.transform = `translate3d(${lerp(-90, 240, s).toFixed(2)}px, 0, 0)`;
         cloudLeftRef.current.style.opacity = String(lerp(0.75, 0.12, s));
       }
       if (cloudRightRef.current) {
-        cloudRightRef.current.style.transform = `translate3d(${lerp(145, -260, s)}px, 0, 0)`;
+        cloudRightRef.current.style.transform = `translate3d(${lerp(145, -260, s).toFixed(2)}px, 0, 0)`;
         cloudRightRef.current.style.opacity = String(lerp(0.9, 0.12, s));
       }
       if (cloudFarRef.current) {
-        cloudFarRef.current.style.transform = `translate3d(${lerp(-320, 190, s)}px, 0, 0)`;
+        cloudFarRef.current.style.transform = `translate3d(${lerp(-320, 190, s).toFixed(2)}px, 0, 0)`;
         cloudFarRef.current.style.opacity = String(lerp(0.9, 0.12, s));
       }
     };
 
-    const onScroll = () => {
+    const schedule = () => {
       if (!raf) raf = requestAnimationFrame(update);
     };
 
+    measure();
     update();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+
+    // Hero balandligi o'zgarganda (font/rasm yuklanganida) qayta o'lchaymiz
+    const ro = new ResizeObserver(() => {
+      measure();
+      schedule();
+    });
+    if (heroRef.current) ro.observe(heroRef.current);
+
+    const onResize = () => {
+      measure();
+      schedule();
+    };
+    const onMq = () => {
+      measure();
+      schedule();
+    };
+
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", onResize);
+    mq.addEventListener("change", onMq);
+    rmq.addEventListener("change", onMq);
+
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", onResize);
+      mq.removeEventListener("change", onMq);
+      rmq.removeEventListener("change", onMq);
+      ro.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
@@ -167,15 +228,23 @@ export default function Hero() {
             />
           </div>
 
-          {/* Qal'a — scroll bilan kattalashadi */}
-          <img
-            ref={castleRef}
-            src="/images/cloud-castle/home.webp"
-            alt=""
-            aria-hidden="true"
-            className="castle-fade relative z-10 mx-auto block h-auto w-[600px] max-w-none object-contain md:w-[1280px]"
-            style={{ transformOrigin: "50% 100%", willChange: "transform" }}
-          />
+          {/* Qal'a — scroll bilan kattalashadi.
+              Wrapper qal'ani har ekran o'lchamida markazda ushlab turadi
+              (transform wrapper'da, scroll o'zgarishi esa rasmda — ular to'qnashmaydi). */}
+          <div className="relative z-10 mx-auto w-full">
+            <div className="castle-fade relative left-1/2 w-[600px] -translate-x-1/2 md:w-[1280px]">
+              <img
+                ref={castleRef}
+                src="/images/cloud-castle/home.webp"
+                alt=""
+                aria-hidden="true"
+                className="block h-auto w-full max-w-none object-contain"
+                style={{ transformOrigin: "50% 100%", willChange: "transform" }}
+                decoding="async"
+                fetchPriority="high"
+              />
+            </div>
+          </div>
         </div>
       </header>
     </section>

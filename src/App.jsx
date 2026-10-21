@@ -47,7 +47,7 @@ export default function App() {
 
           <div className="relative z-10 flex w-full justify-center">
             <main
-              className="page-card relative z-10 isolate w-full md:mx-auto md:border md:border-[#12346722]"
+              className="page-card relative z-10 isolate w-full overflow-x-clip md:mx-auto md:border md:border-[#12346722]"
               style={{ backgroundColor: "transparent", color: "#123467" }}
             >
               {/* Yuqoridagi yirik gul watermark'i */}

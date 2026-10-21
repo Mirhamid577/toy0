@@ -60,11 +60,20 @@ body,
   background: #ffffff;
 }
 
+/*
+ * Gorizontal siljitishni butunlay taqiqlaymiz.
+ * `clip` scroll konteyneri yaratmaydi va mobil brauzerlarda
+ * sahifa kengayib kichiklashtirilishining (layout viewport kengayishi) oldini oladi.
+ */
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   font-family: "Cormorant Garamond", serif;
   color: #123467;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
 
 /* ---------- Reveal on scroll (chorlove usuli) ---------- */
